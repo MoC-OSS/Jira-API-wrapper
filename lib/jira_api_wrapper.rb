@@ -1,61 +1,48 @@
 require "jira_api_wrapper/version"
 
 module JiraApiWrapper
-  # extend ::Helper
+
+  ROLES =
+    {'mocglobal' =>
+       {
+         'Account Manager' => 10161,
+         'Administrators' => 10002,
+         'BA' => 10104,
+         'Client' => 10110,
+         'Designer' => 10162,
+         'Developer' => 10102,
+         'Developers' => 10236,
+         'Lead Developer' => 10105,
+         'Project Manager' => 10101,
+         'QA' => 10103,
+       },
+     'cosaction' =>
+       {
+         'Administrators' => 10002,
+         'Project Manager' => 10102,
+         'Developers' => 10105,
+         'Developer Partner' => 10101
+       },
+     'romand' =>
+       {
+         'Administrators' => 10002,
+         'Developers' => 10102,
+       },
+     'moctest' =>
+       {
+         'Administrators' => 10002,
+         'Developers' => 10100,
+       }
+    }
 
   class << self
 
-    MOCGLOBAL = 'mocglobal'
-    ZIPIFYAPPS = 'zipifyapps'
-    COSACTION = 'cosaction'
-    INSTANCES = [MOCGLOBAL, ZIPIFYAPPS, COSACTION]
+    attr_reader :instance, :authorization_type, :token, :bearer
 
-    CONFIG = {
-      MOCGLOBAL => 'Ym9nZGFuLnNlcmdpaWVua29AbWFzdGVyb2Zjb2RlLmNvbTpnRlBJZmxoZXp0ZlZEc2dMWlFhYTU1OUM=',
-      ZIPIFYAPPS => 'b2xlZy5yZXBldHlsb0BtYXN0ZXJvZmNvZGUuY29tOjVQVVhPMUFkTEJZb1VWNDJwTVNmQ0ZBNg==',
-      COSACTION => 'ZGltYS5sdWtoYW5pbkBtYXN0ZXJvZmNvZGUuY29tOklPbUg1c3BTa1FRTGUxWGQ4VjMzMjIzNw==',
-      # 'romand' => 'Ym9nZGFuLnNlcmdpaWVua29AbWFzdGVyb2Zjb2RlLmNvbTpnRlBJZmxoZXp0ZlZEc2dMWlFhYTU1OUM=',
-      # 'trulet' => 'dmlrdG9yaWlhdHltb3NoY2h1a0B0cnVsZXQuY29tOlhWVkFKR2pwZzZmSDdCMkdmY0pDNkRBOQ=='
-    }
-
-    ROLES =
-      {MOCGLOBAL =>
-         {
-           'Account Manager' => 10161,
-           'Administrators' => 10002,
-           'BA' => 10104,
-           'Client' => 10110,
-           'Designer' => 10162,
-           'Developer' => 10102,
-           'Developers' => 10236,
-           'Lead Developer' => 10105,
-           'Project Manager' => 10101,
-           'QA' => 10103,
-         },
-      COSACTION =>
-         {
-           'Administrators' => 10002,
-           'Project Manager' => 10102,
-           'Developers' => 10105,
-           'Developer Partner' => 10101
-         },
-      'romand' =>
-         {
-           'Administrators' => 10002,
-           'Developers' => 10102,
-         },
-      'moctest' =>
-         {
-           'Administrators' => 10002,
-           'Developers' => 10100,
-         }
-      }
-
-    attr_reader :instance, :authorization_type, :bearer
-
-    def configure(instance:, authorization_type: 'Bearer', bearer: nil)
+    def configure(instance:, authorization_type: 'Basic', token: nil, bearer: nil)
       @instance = instance
       @authorization_type = authorization_type
+      @token = token
       @bearer = bearer
     end
 
@@ -65,7 +52,7 @@ module JiraApiWrapper
     end
 
     def create_query_url(fields, filters)
-      query_url = URI.encode("search?fields=#{fields}&jql=worklogDate >= #{filters['from']} AND worklogDate <= #{filters['to']}")
+      query_url = URI.encode("search?fields=#{fields}&jql=worklogDate >= '#{filters['from']}' AND worklogDate <= '#{filters['to']}'")
       if filters['projects'].present?
         query_url += " AND project in (#{filters['projects'].map {|el| "'#{el}'"}.join(',')})"
       end
@@ -82,14 +69,15 @@ module JiraApiWrapper
     end
 
     def paged_data(query_url, fields)
+      issues = []
+
       maxResults = 100
       query_url += "&maxResults=#{maxResults}"
       issue_quantity = maxResults
       startAt = 0
-      issues = []
 
       while issue_quantity == maxResults do
-        response = request(query_url + "&startAt=#{startAt}")
+        response = api_request(query_url + "&startAt=#{startAt}")
         if response['issues'].present?
           issues += response['issues']
           issue_quantity = response['issues'].count
@@ -119,11 +107,11 @@ module JiraApiWrapper
       if authorization_type == 'Bearer'
         "Bearer #{bearer[:token]}"
       else
-        "Basic #{CONFIG[instance]}"
+        "Basic #{token}"
       end
     end
 
-    def request(query_url)
+    def api_request(query_url)
       url = base_url + query_url
       begin
         HTTParty.get(url, {
@@ -137,13 +125,13 @@ module JiraApiWrapper
 
     def issue_worklogs(issue_key)
       query_url = URI.encode("#{base_url}issue/#{issue_key}/worklog")
-      request(query_url)
+      api_request(query_url)
     end
 
     def projects(filters = {})
       query_url = 'project'
       query_url += "/#{filters['project_id']}" if filters['project_id'].present?
-      response = request(query_url)
+      response = api_request(query_url)
       if response.is_a?(Array)
         response.collect {|h| ["#{h['name']} - #{h['key']}", h['id']]}
       else
@@ -153,14 +141,14 @@ module JiraApiWrapper
 
     def project_type(project_id)
       query_url = "project/#{project_id}"
-      response = request(query_url)
+      response = api_request(query_url)
       response['style']
     end
 
     def next_gen_project_roles(project_id)
       roles = {}
       query_url = "project/#{project_id}/role"
-      response = request(query_url)
+      response = api_request(query_url)
       response.each do |el|
         roles['Administrator'] = el[1].split('/').last if el[0] == 'Administrator'
         roles['Member'] = el[1].split('/').last if el[0] == 'Member'
@@ -178,7 +166,7 @@ module JiraApiWrapper
       end
       roles.each do |role|
         query_url = "project/#{project_id}/role/#{role[1]}"
-        response = request(query_url)
+        response = api_request(query_url)
         if response['actors']
           users = response['actors'].collect {|h| [h['displayName'], h.dig('actorUser', 'accountId')]}.select {|k, v| v.present?}
         else
@@ -191,7 +179,7 @@ module JiraApiWrapper
 
     def user_is_in_group?(account_id, group)
       query_url = "user/?accountId=#{account_id}&expand=groups"
-      response = request(query_url)
+      response = api_request(query_url)
       group = Array(group) unless group.is_a?(Array)
       (response.dig('groups', 'items')&.pluck('name') & group).present?
     end
@@ -205,7 +193,7 @@ module JiraApiWrapper
       end
       if role_id.present?
         query_url = "project/#{project_id}/role/#{role_id}"
-        response = request(query_url)
+        response = api_request(query_url)
         if response['actors']
           actors = response['actors'].collect {|h| [h['displayName'], h.dig('actorUser', 'accountId')]}.select {|k, v| v.present?}
           actors.select {|key, val| val == self.bearer[:account_id]}.present?
@@ -219,21 +207,21 @@ module JiraApiWrapper
 
     def issue_types
       query_url = 'issuetype'
-      response = request(query_url)
+      response = api_request(query_url)
       response.collect {|h| [h['name']]}.uniq
     end
 
     def statuses
       query_url = 'status'
-      response = request(query_url)
+      response = api_request(query_url)
       response.collect {|h| [h['name'], h['id']]}
     end
 
     def projects_time_spent(id=nil)
       query_url = id ? "search?fields=worklog&jql=project=#{id}" : "search?fields=project,worklog"
-      issues = paged_data(query_url)
+      issues = paged_data(query_url, 'worklog')
       issues.map do |issue|
-        if issue.dig('fields', 'worklog', 'worklogs').count == 20
+        if issue.dig('fields', 'worklog', 'worklogs')&.size == 20
           worklog_response = issue_worklog(issue['key'])
           issue['fields']['worklog'] = worklog_response
         end
@@ -248,12 +236,12 @@ module JiraApiWrapper
 
     def issue(key)
       query_url = "issue/#{key}"
-      request(query_url)
+      api_request(query_url)
     end
 
     def issue_worklog(issue_key)
       query_url = "issue/#{issue_key}/worklog"
-      request(query_url)
+      api_request(query_url)
     end
 
     def test
