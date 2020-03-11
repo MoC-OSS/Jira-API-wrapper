@@ -124,7 +124,7 @@ module JiraApiWrapper
     end
 
     def issue_worklogs(issue_key)
-      query_url = URI.encode("#{base_url}issue/#{issue_key}/worklog")
+      query_url = URI.encode("issue/#{issue_key}/worklog")
       api_request(query_url)
     end
 
