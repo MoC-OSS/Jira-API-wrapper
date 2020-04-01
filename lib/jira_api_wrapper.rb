@@ -65,6 +65,9 @@ module JiraApiWrapper
       if filters['statuses'].present?
         query_url += URI.encode(" AND status in (#{filters['statuses'].map {|el| "'#{el}'"}.join(',')})")
       end
+      if filters['exclude_labels'].present?
+        query_url += URI.encode("AND (labels not in(#{filters['exclude_labels'].map {|el| "'#{el}'"}.join(',')}) or labels is EMPTY)")
+      end
       query_url
     end
 
@@ -209,6 +212,12 @@ module JiraApiWrapper
       query_url = 'issuetype'
       response = api_request(query_url)
       response.collect {|h| [h['name']]}.uniq
+    end
+
+    def labels
+      query_url = 'label'
+      response = api_request(query_url)
+      response['values']
     end
 
     def statuses
