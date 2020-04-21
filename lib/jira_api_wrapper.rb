@@ -253,6 +253,14 @@ module JiraApiWrapper
       api_request(query_url)
     end
 
+    def account_ids(user_names)
+      params = ''
+      user_names.each { |user_name| params += "&username=#{user_name}" }
+      params.sub!('&','?')
+      query_url = "user/bulk/migration#{params}"
+      api_request(query_url)
+    end
+
     def test
       puts 'Success!'
     end
