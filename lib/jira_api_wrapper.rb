@@ -223,7 +223,7 @@ module JiraApiWrapper
     def statuses
       query_url = 'status'
       response = api_request(query_url)
-      response.collect {|h| [h['name'], h['id']]}
+      response.collect {|h| h['name']}.uniq
     end
 
     def projects_time_spent(id=nil)
