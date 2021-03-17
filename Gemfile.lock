@@ -1,0 +1,20 @@
+PATH
+  remote: .
+  specs:
+    jira-api-wrapper (0.4.0)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    rake (12.0.0)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  bundler (~> 2.0)
+  jira-api-wrapper!
+  rake (~> 12.0)
+
+BUNDLED WITH
+   2.2.10

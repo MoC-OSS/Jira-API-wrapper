@@ -114,16 +114,33 @@ module JiraApiWrapper
       end
     end
 
-    def api_request(query_url)
+    def api_request(query_url, maxResults = nil)
       url = base_url + query_url
-      begin
+      if maxResults.present?
+        total_response = []
+        query_url += "&maxResults=#{maxResults}"
+        element_quantity = maxResults
+        startAt = 0
+        while element_quantity == maxResults do
+          response = api_request(query_url + "&startAt=#{startAt}")
+          break response if response.respond_to?(:has_key?) && response.has_key?('errors')
+          if response.present?
+            total_response << response
+            element_quantity = response.count
+            startAt += maxResults
+          else
+            element_quantity = 0
+          end
+        end
+        total_response.flatten
+      else
         HTTParty.get(url, {
-          headers: {'Content-Type' => 'application/json', 'Authorization' => authorization_info}
+          headers: { 'Content-Type' => 'application/json', 'Authorization' => authorization_info }
         }).parsed_response
-      rescue SocketError, Errno::ECONNREFUSED, Timeout::Error, HTTParty::Error, OpenSSL::SSL::SSLError  => e
-        Rails.logger.info "Error: at #{Time.now} - #{e.message}"
-        {}
       end
+    rescue SocketError, Errno::ECONNREFUSED, Timeout::Error, HTTParty::Error, OpenSSL::SSL::SSLError => e
+      Rails.logger.info "Error: at #{Time.now} - #{e.message}"
+      return {}
     end
 
     def issue_worklogs(issue_key)
