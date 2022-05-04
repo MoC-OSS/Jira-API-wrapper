@@ -2,6 +2,11 @@ require "jira_api_wrapper/version"
 
 module JiraApiWrapper
 
+  AUTHORIZATION_SERVER_URL = "https://auth.atlassian.io"
+  EXPIRY_SECONDS = 50
+  GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer"
+  SCOPES = "READ ACT_AS_USER"
+
   ROLES =
     {'mocglobal' =>
        {
@@ -108,7 +113,8 @@ module JiraApiWrapper
 
     def authorization_info
       if authorization_type == 'Bearer'
-        "Bearer #{bearer[:token]}"
+        check_OAuth_access_token
+        "Bearer #{bearer[:user].oauth_access_token}"
       else
         "Basic #{token}"
       end
@@ -283,6 +289,40 @@ module JiraApiWrapper
     end
 
     private
+
+    def check_OAuth_access_token
+      if bearer[:user].oauth_access_token.present?
+        return true if bearer[:user].expires_at > Time.now.to_i
+      end
+
+      opts = {}
+      opts['oauthClientId'] = bearer[:app].oauth_client_id
+      opts['instanceBaseUrl'] = bearer[:app].base_url
+      opts['accountId'] = bearer[:user].account_id
+      opts['secret'] = bearer[:app].shared_secret
+
+      jwtClaims = {
+        iss: "urn:atlassian:connect:clientid:" + opts['oauthClientId'],
+        sub: "urn:atlassian:connect:useraccountid:" + opts['accountId'],
+        tnt: opts['instanceBaseUrl'],
+        aud: AUTHORIZATION_SERVER_URL,
+        iat: Time.now.to_i,
+        exp: Time.now.to_i + EXPIRY_SECONDS
+      }
+
+      assertion = JWT.encode(jwtClaims, opts['secret'])
+
+      query = {
+        grant_type: GRANT_TYPE,
+        assertion: assertion,
+        scope: SCOPES
+      };
+
+      response = HTTParty.post(AUTHORIZATION_SERVER_URL + '/oauth2/token', query: query)
+      bearer[:user].oauth_access_token = response['access_token']
+      bearer[:user].expires_at = (Time.now + 13.minutes).to_i
+      bearer[:user].save!
+    end
 
     def group_data(data, grouping_fields, summing_fields=['worklogs'])
       grouped_data = data.group_by {|hash| hash.values_at(*grouping_fields).join ":"}.values.map do |grouped|
