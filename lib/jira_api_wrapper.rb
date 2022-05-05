@@ -222,7 +222,7 @@ module JiraApiWrapper
         response = api_request(query_url)
         if response['actors']
           actors = response['actors'].collect {|h| [h['displayName'], h.dig('actorUser', 'accountId')]}.select {|k, v| v.present?}
-          actors.select {|key, val| val == self.bearer[:account_id]}.present?
+          actors.select {|key, val| val == self.bearer[:user].account_id}.present?
         else
           false
         end
