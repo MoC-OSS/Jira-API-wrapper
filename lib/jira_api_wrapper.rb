@@ -2,7 +2,7 @@ require "jira_api_wrapper/version"
 
 module JiraApiWrapper
 
-  AUTHORIZATION_SERVER_URL = "https://auth.atlassian.io"
+  AUTHORIZATION_SERVER_URL = "https://oauth-2-authorization-server.services.atlassian.com"
   EXPIRY_SECONDS = 50
   GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer"
   SCOPES = "READ ACT_AS_USER"
@@ -150,8 +150,23 @@ module JiraApiWrapper
     end
 
     def issue_worklogs(issue_key)
+      worklogs = []
+      maxResults = 5000
       query_url = URI.encode("issue/#{issue_key}/worklog")
-      api_request(query_url)
+      query_url += "?maxResults=#{maxResults}"
+      worklogs_quantity = maxResults
+      startAt = 0
+      while worklogs_quantity == maxResults do
+        response = api_request(query_url + "&startAt=#{startAt}")
+        if response['worklogs'].present?
+          worklogs += response['worklogs']
+          worklogs_quantity = response['worklogs'].count
+          startAt += maxResults
+        else
+          worklogs_quantity = 0
+        end
+      end
+      {'worklogs' => worklogs}
     end
 
     def projects(filters = {})
@@ -240,7 +255,7 @@ module JiraApiWrapper
     def labels
       query_url = 'label'
       response = api_request(query_url)
-      response['values']
+      response['values'] || {}
     end
 
     def statuses
@@ -254,7 +269,7 @@ module JiraApiWrapper
       issues = paged_data(query_url, 'worklog')
       issues.map do |issue|
         if issue.dig('fields', 'worklog', 'worklogs')&.size == 20
-          worklog_response = issue_worklog(issue['key'])
+          worklog_response = issue_worklogs(issue['key'])
           issue['fields']['worklog'] = worklog_response
         end
       end
@@ -268,11 +283,6 @@ module JiraApiWrapper
 
     def issue(key)
       query_url = "issue/#{key}"
-      api_request(query_url)
-    end
-
-    def issue_worklog(issue_key)
-      query_url = "issue/#{issue_key}/worklog"
       api_request(query_url)
     end
 
