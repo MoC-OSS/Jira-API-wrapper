@@ -57,21 +57,21 @@ module JiraApiWrapper
     end
 
     def create_query_url(fields, filters)
-      query_url = URI.encode("search?fields=#{fields}&jql=worklogDate >= '#{filters['from']}' AND worklogDate <= '#{filters['to']}'")
+      query_url = "search?fields=#{fields}&jql=worklogDate >= '#{filters['from']}' AND worklogDate <= '#{filters['to']}'"
       if filters['projects'].present?
         query_url += " AND project in (#{filters['projects'].map {|el| "'#{el}'"}.join(',')})"
       end
       if filters['issue_types'].present?
-        query_url += URI.encode(" AND issuetype in (#{filters['issue_types'].map {|el| "'#{el}'"}.join(',')})")
+        query_url += " AND issuetype in (#{filters['issue_types'].map {|el| "'#{el}'"}.join(',')})"
       end
       if filters['users'].present?
-        query_url += URI.encode(" AND worklogAuthor in (#{filters['users'].map {|el| "'#{el}'"}.join(',')})")
+        query_url += " AND worklogAuthor in (#{filters['users'].map {|el| "'#{el}'"}.join(',')})"
       end
       if filters['statuses'].present?
-        query_url += URI.encode(" AND status in (#{filters['statuses'].map {|el| "'#{el}'"}.join(',')})")
+        query_url += " AND status in (#{filters['statuses'].map {|el| "'#{el}'"}.join(',')})"
       end
       if filters['exclude_labels'].present?
-        query_url += URI.encode("AND (labels not in(#{filters['exclude_labels'].map {|el| "'#{el}'"}.join(',')}) or labels is EMPTY)")
+        query_url += "AND (labels not in(#{filters['exclude_labels'].map {|el| "'#{el}'"}.join(',')}) or labels is EMPTY)"
       end
       query_url
     end
@@ -152,7 +152,7 @@ module JiraApiWrapper
     def issue_worklogs(issue_key)
       worklogs = []
       maxResults = 5000
-      query_url = URI.encode("issue/#{issue_key}/worklog")
+      query_url = "issue/#{issue_key}/worklog"
       query_url += "?maxResults=#{maxResults}"
       worklogs_quantity = maxResults
       startAt = 0
