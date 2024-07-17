@@ -32,6 +32,11 @@ module JiraApiWrapper
        {
          'Administrators' => 10002,
          'Developers' => 10102,
+         'Lead Developer' => 10262,
+         'Developer' => 10263,
+         'QA' => 10264,
+         'Designer' => 10265,
+         'BA' => 10266
        },
      'moctest' =>
        {
@@ -40,15 +45,34 @@ module JiraApiWrapper
        }
     }
 
+  NEXT_GEN_ROLES = %w[Administrator Member Viewer]
+
   class << self
 
     attr_reader :instance, :authorization_type, :token, :bearer
 
     def configure(instance:, authorization_type: 'Basic', token: nil, bearer: nil)
-      @instance = instance
+      @instance = instance.to_s
       @authorization_type = authorization_type
       @token = token
       @bearer = bearer
+    end
+
+    def add_actor_to_project_role(project_id, role, user_account_id)
+      project_type = project_type(project_id)
+      if project_type == 'next-gen'
+        roles = next_gen_project_roles(project_id)
+        role_id = roles[role]
+      else
+        role_id = ROLES[instance][role]
+      end
+      query_url = "project/#{project_id}/role/#{role_id}"
+      body = {'user' => [user_account_id]}
+      response = api_request(query_url, nil, 'post', body)
+      if response["errorMessages"].present?
+        params = {project_id: project_id, role: role, user_account_id: user_account_id}
+        raise("#{params}: #{response["errorMessages"]}")
+      end
     end
 
     def data(fields:, filters: nil)
@@ -120,7 +144,7 @@ module JiraApiWrapper
       end
     end
 
-    def api_request(query_url, maxResults = nil)
+    def api_request(query_url, maxResults = nil, method = 'get', body = nil)
       url = base_url + query_url
       if maxResults.present?
         total_response = []
@@ -140,9 +164,9 @@ module JiraApiWrapper
         end
         total_response.flatten
       else
-        HTTParty.get(url, {
-          headers: { 'Content-Type' => 'application/json', 'Authorization' => authorization_info }
-        }).parsed_response
+        options = {headers: { 'Content-Type' => 'application/json', 'Authorization' => authorization_info }}
+        options[:body] = body.to_json if body.present?
+        HTTParty.send(method.to_sym, url, options).parsed_response
       end
     rescue SocketError, Errno::ECONNREFUSED, Timeout::Error, HTTParty::Error, OpenSSL::SSL::SSLError => e
       Rails.logger.info "Error: at #{Time.now} - #{e.message}"
@@ -191,8 +215,9 @@ module JiraApiWrapper
       query_url = "project/#{project_id}/role"
       response = api_request(query_url)
       response.each do |el|
-        roles['Administrator'] = el[1].split('/').last if el[0] == 'Administrator'
-        roles['Member'] = el[1].split('/').last if el[0] == 'Member'
+        next unless el[0].in?(NEXT_GEN_ROLES)
+
+        roles[el[0]] = el[1].split('/').last
       end
       roles
     end
