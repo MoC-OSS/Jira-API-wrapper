@@ -166,7 +166,10 @@ module JiraApiWrapper
       else
         options = {headers: { 'Content-Type' => 'application/json', 'Authorization' => authorization_info }}
         options[:body] = body.to_json if body.present?
-        HTTParty.send(method.to_sym, url, options).parsed_response
+        response = HTTParty.send(method.to_sym, url, options).parsed_response
+        raise 'Unauthorized (401)' if response['Unauthorized (401)'].present?
+
+        response
       end
     rescue SocketError, Errno::ECONNREFUSED, Timeout::Error, HTTParty::Error, OpenSSL::SSL::SSLError => e
       Rails.logger.info "Error: at #{Time.now} - #{e.message}"
