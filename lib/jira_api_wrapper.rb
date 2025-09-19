@@ -81,7 +81,7 @@ module JiraApiWrapper
     end
 
     def create_query_url(fields, filters)
-      query_url = "search?fields=#{fields}&jql=worklogDate >= '#{filters['from']}' AND worklogDate <= '#{filters['to']}'"
+      query_url = "search/jql?fields=#{fields}&jql=worklogDate >= '#{filters['from']}' AND worklogDate <= '#{filters['to']}'"
       if filters['projects'].present?
         query_url += " AND project in (#{filters['projects'].map {|el| "'#{el}'"}.join(',')})"
       end
@@ -105,18 +105,15 @@ module JiraApiWrapper
 
       maxResults = 100
       query_url += "&maxResults=#{maxResults}"
-      issue_quantity = maxResults
-      startAt = 0
+      next_page_token = nil
 
-      while issue_quantity == maxResults do
-        response = api_request(query_url + "&startAt=#{startAt}")
-        if response['issues'].present?
-          issues += response['issues']
-          issue_quantity = response['issues'].count
-          startAt += maxResults
-        else
-          issue_quantity = 0
-        end
+      loop do
+        response = api_request(query_url + (next_page_token ? "&nextPageToken=#{next_page_token}" : ''))
+        issues += response['issues'] if response['issues'].present?
+        # The loop will break if there is no next page token in the response
+        break if response['issues'].empty? || !response.key?('nextPageToken')
+
+        next_page_token = response['nextPageToken']
       end
 
       if fields.include?('worklog')
@@ -132,7 +129,7 @@ module JiraApiWrapper
     end
 
     def base_url
-      "https://#{instance}.atlassian.net/rest/api/2/"
+      "https://#{instance}.atlassian.net/rest/api/3/"
     end
 
     def authorization_info
@@ -167,12 +164,14 @@ module JiraApiWrapper
         options = {headers: { 'Content-Type' => 'application/json', 'Authorization' => authorization_info }}
         options[:body] = body.to_json if body.present?
         response = HTTParty.send(method.to_sym, url, options).parsed_response
-        raise 'Unauthorized (401)' if response['Unauthorized (401)'].present?
-
+        if response.is_a?(Hash)
+          raise 'Unauthorized (401)' if response['Unauthorized (401)'].present?
+          Rails.logger.error(response['errorMessages']) if response['errorMessages'].present?
+        end
         response
       end
     rescue SocketError, Errno::ECONNREFUSED, Timeout::Error, HTTParty::Error, OpenSSL::SSL::SSLError => e
-      Rails.logger.info "Error: at #{Time.now} - #{e.message}"
+      Rails.logger.error "Error: at #{Time.now} - #{e.message}"
       return {}
     end
 
@@ -293,20 +292,20 @@ module JiraApiWrapper
     end
 
     def projects_time_spent(id=nil)
-      query_url = id ? "search?fields=worklog&jql=project=#{id}" : "search?fields=project,worklog"
-      issues = paged_data(query_url, 'worklog')
-      issues.map do |issue|
-        if issue.dig('fields', 'worklog', 'worklogs')&.size == 20
-          worklog_response = issue_worklogs(issue['key'])
-          issue['fields']['worklog'] = worklog_response
-        end
-      end
-      if id
-        issues&.map {|h| h['fields']['worklog']['worklogs']&.map {|_h| _h['timeSpentSeconds']}}&.flatten&.inject(:+).to_f
-      else
-        data = issues&.map {|h| {'project_jira_id' => h['fields']['project']['id'], 'seconds' => h['fields']['worklog']['worklogs']&.map {|_h| _h['timeSpentSeconds']}&.flatten&.inject(:+)}}
-        group_data(data, ['project_jira_id'], summing_fields=['seconds'])
-      end
+      # query_url = id ? "search?fields=worklog&jql=project=#{id}" : "search?fields=project,worklog"
+      # issues = paged_data(query_url, 'worklog')
+      # issues.map do |issue|
+      #   if issue.dig('fields', 'worklog', 'worklogs')&.size == 20
+      #     worklog_response = issue_worklogs(issue['key'])
+      #     issue['fields']['worklog'] = worklog_response
+      #   end
+      # end
+      # if id
+      #   issues&.map {|h| h['fields']['worklog']['worklogs']&.map {|_h| _h['timeSpentSeconds']}}&.flatten&.inject(:+).to_f
+      # else
+      #   data = issues&.map {|h| {'project_jira_id' => h['fields']['project']['id'], 'seconds' => h['fields']['worklog']['worklogs']&.map {|_h| _h['timeSpentSeconds']}&.flatten&.inject(:+)}}
+      #   group_data(data, ['project_jira_id'], summing_fields=['seconds'])
+      # end
     end
 
     def issue(key)
