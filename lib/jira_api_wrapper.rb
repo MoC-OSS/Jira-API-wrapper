@@ -28,6 +28,20 @@ module JiraApiWrapper
          'Developers' => 10105,
          'Developer Partner' => 10101
        },
+     'zipifyapps' =>
+       {
+         'Product Manager' => 10125,
+         'Business Analyst' => 10123,
+         'Product Ops' => 10212,
+         'Support Specialist' => 10211,
+         'Designer' => 10102,
+         'QA Engineer' => 10103,
+         'Developers' => 10100,
+         'Project Manager' => 10106,
+         'Administrators' => 10002,
+         'Front-end Developer' => 10104,
+         'Back-end Developer' => 10105,
+       },
      'romand' =>
        {
          'Administrators' => 10002,
